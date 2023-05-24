@@ -18,7 +18,7 @@ jobs:
           
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
-        run: sudo apt update && sudo apt install build-essential cmake pkg-config automake autoconf libtool unzip qt5-qmake qt5-default libxcursor-dev libglu1-mesa-dev libpulse-dev libasound2-dev mingw-w64-x86-64-dev gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+        run: sudo apt update && sudo apt install build-essential cmake pkg-config automake autoconf libtool unzip qt5-qmake qtbase5-dev libxcursor-dev libglu1-mesa-dev libpulse-dev libasound2-dev mingw-w64-x86-64-dev gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
         
       - name: Install Mac dependencies
         if: runner.os != 'Linux'
