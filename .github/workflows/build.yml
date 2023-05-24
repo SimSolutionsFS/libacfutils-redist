@@ -1,0 +1,40 @@
+name: Build libacfutils from scratch
+on:
+  workflow_dispatch:
+   
+jobs:
+  Compile:
+    strategy:
+      matrix:
+        os:
+        - ubuntu-latest
+        - windows-latest
+        - macos-latest
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v3.5.2
+        with:
+          repository: skiselkov/libacfutils
+          submodules: recursive
+          
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt update && sudo apt install build-essential cmake pkg-config automake autoconf libtool unzip qt5-qmake qt5-default libxcursor-dev libglu1-mesa-dev libpulse-dev libasound2-dev mingw-w64-x86-64-dev gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64
+        
+      - name: Install Mac dependencies
+        if: runner.os != 'Linux'
+        run: ./install-macports.sh
+        
+      - name: Config deps
+        run: ./pkg-config-deps
+        
+      - name: Build deps
+        run: ./build_deps
+        
+      - name: Build redist
+        run: ./build_redist
+        
+      - uses: actions/upload-artifact@v3.1.2
+        with:
+          name: ${{matrix.os}} Redist Folder
+          path: libacfutils-redist/
