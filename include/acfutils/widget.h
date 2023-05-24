@@ -30,6 +30,7 @@
 #include <XPWidgets.h>
 
 #include "delay_line.h"
+#include "mt_cairo_render.h"
 #include "types.h"
 
 #ifdef	__cplusplus
@@ -50,6 +51,13 @@ typedef struct {
 	delay_line_t	snap_hold_delay;
 } win_resize_ctl_t;
 
+typedef struct {
+	int		left;
+	int		top;
+	int		right;
+	int		bottom;
+} monitor_t;
+
 #define	create_widget_rel	ACFSYM(create_widget_rel)
 API_EXPORT XPWidgetID create_widget_rel(int x, int y, bool_t y_from_bottom,
     int width, int height, int visible, const char *descr, int root,
@@ -62,6 +70,7 @@ API_EXPORT XPWidgetID create_widget_rel2(int x, int y, bool_t y_from_bottom,
 
 API_EXPORT void widget_win_center(XPWidgetID window);
 API_EXPORT void classic_win_center(XPLMWindowID window);
+API_EXPORT monitor_t lacf_get_first_monitor_bounds(void);
 
 API_EXPORT void tooltip_init(void);
 API_EXPORT void tooltip_fini(void);
@@ -77,11 +86,18 @@ API_EXPORT void tooltip_set_opaque(tooltip_set_t *tts, bool_t opaque);
 API_EXPORT void tooltip_new(tooltip_set_t *tts, int x, int y, int w, int h,
     const char *text);
 
+API_EXPORT void tooltip_set_font_face(tooltip_set_t *tts,
+    cairo_font_face_t *font);
+API_EXPORT cairo_font_face_t *tooltip_get_font_face(const tooltip_set_t *tts);
+
+API_EXPORT void tooltip_set_font_size(tooltip_set_t *tts, double size);
+API_EXPORT double tooltip_get_font_size(const tooltip_set_t *tts);
+
 #define	window_follow_VR	ACFSYM(window_follow_VR)
-API_EXPORT void window_follow_VR(XPLMWindowID win);
+API_EXPORT bool_t window_follow_VR(XPLMWindowID win);
 
 #define	widget_follow_VR	ACFSYM(widget_follow_VR)
-API_EXPORT void widget_follow_VR(XPWidgetID win);
+API_EXPORT bool_t widget_follow_VR(XPWidgetID win);
 
 #define	window_is_on_screen	ACFSYM(window_is_on_screen)
 API_EXPORT bool_t window_is_on_screen(XPLMWindowID win);

@@ -20,7 +20,7 @@
  * CDDL HEADER END
  */
 /*
- * Copyright 2018 Saso Kiselkov. All rights reserved.
+ * Copyright 2023 Saso Kiselkov. All rights reserved.
  */
 
 #ifndef	_ACFUTILS_PID_CTL_H_
@@ -92,11 +92,10 @@ static inline void pid_ctl_set_r_d(pid_ctl_t *pid, double r_d);
  *	approaches the current delta-error value.
  */
 static inline void
-pid_ctl_init(pid_ctl_t *pid, double k_p, double k_i, double lim_i, double k_d,
-    double r_d)
+pid_ctl_init_noreset(pid_ctl_t *pid, double k_p, double k_i, double lim_i,
+    double k_d, double r_d)
 {
 	ASSERT(pid != NULL);
-	pid_ctl_reset(pid);
 	pid->k_p = k_p;
 	pid->k_p_gain = 1;
 	pid->k_i = k_i;
@@ -106,6 +105,14 @@ pid_ctl_init(pid_ctl_t *pid, double k_p, double k_i, double lim_i, double k_d,
 	pid->k_d_gain = 1;
 	pid->r_d = r_d;
 	pid->integ_clamp = B_TRUE;
+}
+static inline void
+pid_ctl_init(pid_ctl_t *pid, double k_p, double k_i, double lim_i, double k_d,
+    double r_d)
+{
+	ASSERT(pid != NULL);
+	pid_ctl_init_noreset(pid, k_p, k_i, lim_i, k_d, r_d);
+	pid_ctl_reset(pid);
 }
 
 static inline void
@@ -357,6 +364,17 @@ pid_ctl_get_deriv(const pid_ctl_t *pid)
 {
 	ASSERT(pid != NULL);
 	return (pid->deriv);
+}
+
+/*
+ * Sets all 3 gain values in one call.
+ */
+static inline void
+pid_ctl_set_gain(pid_ctl_t *pid, double gain)
+{
+	pid_ctl_set_k_p_gain(pid, gain);
+	pid_ctl_set_k_d_gain(pid, gain);
+	pid_ctl_set_k_i_gain(pid, gain);
 }
 
 #define	PID_CTL_DEBUG(pid_ptr) \

@@ -20,7 +20,7 @@
  * CDDL HEADER END
  */
 /*
- * Copyright 2019 Saso Kiselkov. All rights reserved.
+ * Copyright 2023 Saso Kiselkov. All rights reserved.
  */
 
 #ifndef	_ACF_UTILS_MT_CAIRO_RENDER_H_
@@ -34,12 +34,14 @@
 #include "geom.h"
 #include "glew.h"
 #include "log.h"
+#include "font_utils.h"		/* for backwards compat with apps */
+#include "cairo_utils.h"	/* for backwards compat with apps */
 
 #ifdef	__cplusplus
 extern "C" {
 #endif
 
-API_EXPORT void mt_cairo_render_glob_init(void);
+API_EXPORT void mt_cairo_render_glob_init(bool_t want_coherent_mem);
 
 typedef bool_t (*mt_cairo_init_cb_t)(cairo_t *cr, void *userinfo);
 typedef void (*mt_cairo_fini_cb_t)(cairo_t *cr, void *userinfo);
@@ -65,6 +67,7 @@ API_EXPORT void mt_cairo_render_set_texture_filter(mt_cairo_render_t *mtcr,
     unsigned gl_filter_enum);
 API_EXPORT void mt_cairo_render_set_shader(mt_cairo_render_t *mtcr,
     unsigned prog);
+unsigned mt_cairo_render_get_shader(mt_cairo_render_t *mtcr);
 API_EXPORT void mt_cairo_render_set_monochrome(mt_cairo_render_t *mtcr,
     vect3_t color);
 API_EXPORT vect3_t mt_cairo_render_get_monochrome(
@@ -102,25 +105,9 @@ typedef struct {
 	unsigned	x, y;
 	unsigned	w, h;
 } mtcr_rect_t;
-API_EXPORT void mt_cairo_render_blit_back2front(mt_cairo_render_t *mtcr,
-    mtcr_rect_t *rects, size_t num);
-
-#define	ft_err2str	ACFSYM(ft_err2str)
-API_EXPORT const char *ft_err2str(FT_Error err);
-#define	try_load_font	ACFSYM(try_load_font)
-API_EXPORT bool_t try_load_font(const char *fontdir, const char *fontfile,
-    FT_Library ft, FT_Face *font, cairo_font_face_t **cr_font);
 
 API_EXPORT void mt_cairo_render_rounded_rectangle(cairo_t *cr, double x,
     double y, double w, double h, double radius);
-
-#define	CAIRO_SURFACE_DESTROY(surf) \
-	do {\
-		if ((surf) != NULL) { \
-			cairo_surface_destroy((surf)); \
-			(surf) = NULL; \
-		} \
-	} while (0)
 
 API_EXPORT mt_cairo_uploader_t *mt_cairo_uploader_init(void);
 API_EXPORT void mt_cairo_uploader_fini(mt_cairo_uploader_t *mtul);

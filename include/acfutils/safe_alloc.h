@@ -23,6 +23,7 @@
 #include <stdlib.h>
 
 #include "assert.h"
+#include "sysmacros.h"
 
 #ifdef	__cplusplus
 extern "C" {
@@ -100,6 +101,14 @@ safe_append_realloc(char *buf, const char *str)
 		if ((ptr) != NULL) \
 			memset((ptr), 0, sizeof (*(ptr)) * (num)); \
 		free(ptr); \
+	} while (0)
+
+#define	BZERO(data)	memset((data), 0, sizeof (*(data)))
+
+#define	SAFE_BZERO(data) \
+	do { \
+		if ((data) != NULL) \
+			BZERO(data); \
 	} while (0)
 
 #ifdef	__cplusplus

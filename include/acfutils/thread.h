@@ -153,30 +153,46 @@ typedef struct {
 #define	atomic32_t		_Atomic int32_t
 #define	atomic_inc_32(x)	atomic_fetch_add((x), 1)
 #define	atomic_dec_32(x)	atomic_fetch_add((x), -1)
+#define	atomic_set_32(x, y)	atomic_store((x), (y))
+#define	atomic_add_32(x, y)	atomic_fetch_add((x), (y))
 #define	atomic64_t		_Atomic int64_t
 #define	atomic_inc_64(x)	atomic_fetch_add((x), 1)
 #define	atomic_dec_64(x)	atomic_fetch_add((x), -1)
+#define	atomic_set_64(x, y)	atomic_store((x), (y))
+#define	atomic_add_64(x, y)	atomic_fetch_add((x), (y))
 #elif	IBM
 #define	atomic32_t		volatile LONG
 #define	atomic_inc_32(x)	InterlockedIncrement((x))
 #define	atomic_dec_32(x)	InterlockedDecrement((x))
+#define	atomic_add_32(x, y)	InterlockedAdd((x), (y))
+#define	atomic_set_32(x, y)	InterlockedExchange((x), (y))
 #define	atomic64_t		volatile LONG64
 #define	atomic_inc_64(x)	InterlockedIncrement64((x))
 #define	atomic_dec_64(x)	InterlockedDecrement64((x))
+#define	atomic_add_64(x, y)	InterlockedAdd64((x), (y))
+#define	atomic_set_64(x, y)	InterlockedExchange64((x), (y))
 #elif	APL
 #define	atomic32_t		volatile int32_t
 #define	atomic_inc_32(x)	OSAtomicAdd32(1, (x))
 #define	atomic_dec_32(x)	OSAtomicAdd32(-1, (x))
+#define	atomic_add_32(x, y)	OSAtomicAdd32((y), (x))
+#define	atomic_set_32(x, y)	(x) = (y)	/* No such op on OSX */
 #define	atomic64_t		volatile int64_t
 #define	atomic_inc_64(x)	OSAtomicAdd64(1, (x))
 #define	atomic_dec_64(x)	OSAtomicAdd64(-1, (x))
+#define	atomic_add_64(x, y)	OSAtomicAdd64((y), (x))
+#define	atomic_set_64(x, y)	(x) = (y)	/* No such op on OSX */
 #else	/* LIN */
 #define	atomic32_t		volatile int32_t
 #define	atomic_inc_32(x)	__sync_add_and_fetch((x), 1)
 #define	atomic_dec_32(x)	__sync_add_and_fetch((x), -1)
+#define	atomic_add_32(x, y)	__sync_add_and_fetch((x), (y))
+#define	atomic_set_32(x, y)	__atomic_store_n((x), (y), __ATOMIC_RELAXED)
 #define	atomic64_t		volatile int64_t
 #define	atomic_inc_64(x)	__sync_add_and_fetch((x), 1)
 #define	atomic_dec_64(x)	__sync_add_and_fetch((x), -1)
+#define	atomic_add_64(x, y)	__sync_add_and_fetch((x), (y))
+#define	atomic_set_64(x, y)	__atomic_store_n((x), (y), __ATOMIC_RELAXED)
 #endif	/* LIN */
 
 #if	APL || LIN
@@ -185,6 +201,7 @@ typedef struct {
 #define	thread_id_t		pthread_t
 #define	mutex_t			pthread_mutex_t
 #define	condvar_t		pthread_cond_t
+#define	curthread_id		pthread_self()
 #define	curthread		pthread_self()
 
 #define	mutex_init(mtx)	\
@@ -217,7 +234,8 @@ typedef struct {
 	CRITICAL_SECTION	cs;
 } mutex_t;
 #define	condvar_t	CONDITION_VARIABLE
-#define	curthread	GetCurrentThreadId()
+#define	curthread_id	GetCurrentThreadId()
+#define	curthread	GetCurrentThread()
 
 #define	mutex_init(x) \
 	do { \
@@ -400,6 +418,40 @@ cv_timedwait(condvar_t *cv, mutex_t *mtx, uint64_t limit)
 #define	cv_signal(cv)		pthread_cond_signal((cv))
 #define	cv_broadcast(cv)	pthread_cond_broadcast((cv))
 
+#if	!APL
+#define	THREAD_PRIO_IDLE	sched_get_priority_min()
+#define	THREAD_PRIO_VERY_LOW	(THREAD_PRIO_NORM - 2)
+#define	THREAD_PRIO_LOW		(THREAD_PRIO_NORM - 1)
+#define	THREAD_PRIO_NORM	0	/* Default priority on Linux */
+#define	THREAD_PRIO_HIGH	(THREAD_PRIO_NORM + 1)
+#define	THREAD_PRIO_VERY_HIGH	(THREAD_PRIO_NORM + 2)
+#define	THREAD_PRIO_RT		sched_get_priority_max()
+#define	thread_set_prio(thr, prio) \
+	do { \
+		struct sched_param param = {}; \
+		param.sched_priority = (prio); \
+		pthread_setschedparam((thr), SCHED_OTHER, &param); \
+	} while (0)
+
+#else	/* APL */
+/*
+ * BIG CAVEAT: Apparently idle thread prioritization is causing massive
+ * thread scheduling stability issues on MacOS Monterey with its Rosetta
+ * x86 emulation. Threads either don't get scheduled, or they run in
+ * "slow mo", gradually speeding up and generally just behave entirely
+ * erratically.
+ */
+#define	THREAD_PRIO_IDLE	0
+#define	THREAD_PRIO_VERY_LOW	0
+#define	THREAD_PRIO_LOW		0
+#define	THREAD_PRIO_NORM	0
+#define	THREAD_PRIO_HIGH	0
+#define	THREAD_PRIO_VERY_HIGH	0
+#define	THREAD_PRIO_RT		0
+#define	thread_set_prio(thr, prio)
+
+#endif	/* APL */
+
 #else	/* !APL && !LIN */
 
 static DWORD _lacf_thread_start_routine(void *arg) UNUSED_ATTR;
@@ -472,6 +524,15 @@ cv_timedwait(condvar_t *cv, mutex_t *mtx, uint64_t limit)
 #define	cv_signal	WakeConditionVariable
 #define	cv_broadcast	WakeAllConditionVariable
 
+#define	THREAD_PRIO_IDLE		THREAD_PRIORITY_IDLE
+#define	THREAD_PRIO_VERY_LOW		THREAD_PRIORITY_LOWEST
+#define	THREAD_PRIO_LOW			THREAD_PRIORITY_BELOW_NORMAL
+#define	THREAD_PRIO_NORM		THREAD_PRIORITY_NORMAL
+#define	THREAD_PRIO_HIGH		THREAD_PRIORITY_ABOVE_NORMAL
+#define	THREAD_PRIO_VERY_HIGH		THREAD_PRIORITY_HIGHEST
+#define	THREAD_PRIO_RT			THREAD_PRIORITY_TIME_CRITICAL
+#define	thread_set_prio(thr, prio)	SetThreadPriority((thr), (prio))
+
 #endif	/* !APL && !LIN */
 
 API_EXPORT void lacf_mask_sigpipe(void);
@@ -511,21 +572,21 @@ rwmutex_enter(rwmutex_t *rw, bool_t write)
 {
 	mutex_enter(&rw->lock);
 
-	if (rw->write_locked && rw->writer != curthread) {
+	if (rw->write_locked && rw->writer != curthread_id) {
 		rw->waiters++;
 		while (rw->write_locked)
 			cv_wait(&rw->cv, &rw->lock);
 		rw->waiters--;
 	}
 	if (write) {
-		if (rw->refcount > 0 && rw->writer != curthread) {
+		if (rw->refcount > 0 && rw->writer != curthread_id) {
 			rw->waiters++;
 			while (rw->refcount > 0)
 				cv_wait(&rw->cv, &rw->lock);
 			rw->waiters--;
 		}
 		rw->write_locked = B_TRUE;
-		rw->writer = curthread;
+		rw->writer = curthread_id;
 	}
 	rw->refcount++;
 
@@ -539,7 +600,7 @@ rwmutex_exit(rwmutex_t *rw)
 	ASSERT3U(rw->refcount, >, 0);
 	rw->refcount--;
 	if (rw->refcount == 0 && rw->write_locked) {
-		ASSERT3U(rw->writer, ==, curthread);
+		ASSERT3U(rw->writer, ==, curthread_id);
 		rw->write_locked = B_FALSE;
 		rw->writer = 0;
 	}
@@ -558,7 +619,7 @@ rwmutex_upgrade(rwmutex_t *rw)
 static inline bool_t
 rwmutex_held_write(rwmutex_t *rw)
 {
-	return (rw->writer == curthread);
+	return (rw->writer == curthread_id);
 }
 
 #ifdef	DEBUG

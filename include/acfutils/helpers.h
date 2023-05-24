@@ -66,8 +66,7 @@ extern "C" {
 static inline bool_t
 is_valid_lat(double lat)
 {
-	enum { ARPT_LAT_LIMIT = 83 };
-	return (!isnan(lat) && fabs(lat) < ARPT_LAT_LIMIT);
+	return (!isnan(lat) && fabs(lat) <= 90);
 }
 
 static inline bool_t
@@ -85,25 +84,36 @@ is_valid_lon(double lon)
 static inline bool_t
 is_valid_elev(double elev)
 {
-	return (elev >= MIN_ELEV && elev <= MAX_ELEV);
+	return (!isnan(elev) && elev >= MIN_ELEV && elev <= MAX_ELEV);
+}
+
+#ifdef	LACF_ENABLE_LEGACY_IS_VALID_ALT
+#define	is_valid_alt(alt)	is_valid_alt_ft(alt)
+#endif
+
+static inline bool_t
+is_valid_alt_ft(double alt_ft)
+{
+	return (!isnan(alt_ft) && alt_ft >= MIN_ALT && alt_ft <= MAX_ALT);
 }
 
 static inline bool_t
-is_valid_alt(double alt)
+is_valid_alt_m(double alt_m)
 {
-	return (alt >= MIN_ALT && alt <= MAX_ALT);
+	return (!isnan(alt_m) && alt_m >= MIN_ALT / 3.2808398950131 &&
+	    alt_m <= MAX_ALT / 3.2808398950131);
 }
 
 static inline bool_t
 is_valid_spd(double spd)
 {
-	return (spd >= 0.0 && spd <= MAX_SPD);
+	return (!isnan(spd) && spd >= 0.0 && spd <= MAX_SPD);
 }
 
 static inline bool_t
 is_valid_hdg(double hdg)
 {
-	return (hdg >= 0.0 && hdg <= 360.0);
+	return (!isnan(hdg) && hdg >= 0.0 && hdg <= 360.0);
 }
 
 #define	rel_hdg(h1, h2)	rel_hdg_impl(h1, h2, __FILE__, __LINE__)
@@ -114,13 +124,17 @@ API_EXPORT double rel_hdg_impl(double hdg1, double hdg2, const char *file,
 static inline double
 normalize_hdg(double hdg)
 {
-	while (hdg < 0.0)
+	hdg = fmod(hdg, 360);
+	/* Flip negative into positive */
+	if (hdg < 0.0)
 		hdg += 360.0;
-	while (hdg >= 360.0)
-		hdg -= 360.0;
 	/* Necessary to avoid FP rounding errors */
-	if (hdg < 0.0 || hdg > 360.0)
+	if (hdg <= 0.0 || hdg > 360.0) {
 		hdg = clamp(hdg, 0, 360);
+		/* Avoid negative zero */
+		if (hdg == -0.0)
+			hdg = 0.0;
+	}
 	return (hdg);
 }
 
@@ -157,15 +171,27 @@ API_EXPORT const char *extract_icao_country_code(const char *icao);
 API_EXPORT bool_t is_valid_xpdr_code(int code);
 #define	is_valid_vor_freq	ACFSYM(is_valid_vor_freq)
 API_EXPORT bool_t is_valid_vor_freq(double freq_mhz);
-static inline bool_t is_valid_vor_freq_hz(uint32_t freq_hz)
+static inline bool_t
+is_valid_vor_freq_hz(uint32_t freq_hz)
 {
 	return (is_valid_vor_freq(freq_hz / 1000000.0));
 }
+static inline bool_t
+is_valid_vor_freq_khz(uint32_t freq_khz)
+{
+	return (is_valid_vor_freq(freq_khz / 1000.0));
+}
 #define	is_valid_loc_freq	ACFSYM(is_valid_loc_freq)
 API_EXPORT bool_t is_valid_loc_freq(double freq_mhz);
-static inline bool_t is_valid_loc_freq_hz(uint32_t freq_hz)
+static inline bool_t
+is_valid_loc_freq_hz(uint32_t freq_hz)
 {
 	return (is_valid_loc_freq(freq_hz / 1000000.0));
+}
+static inline bool_t
+is_valid_loc_freq_khz(uint32_t freq_khz)
+{
+	return (is_valid_loc_freq(freq_khz / 1000.0));
 }
 #define	is_valid_ndb_freq	ACFSYM(is_valid_ndb_freq)
 API_EXPORT bool_t is_valid_ndb_freq(double freq_khz);
@@ -212,15 +238,15 @@ API_EXPORT int airac_time2cycle(time_t t);
 UNUSED_ATTR static ssize_t
 parser_get_next_line(FILE *fp, char **linep, size_t *linecap, unsigned *linenum)
 {
-#ifdef	ACFUTILS_BUILD
+#if	defined(ACFUTILS_BUILD) || defined(ACFUTILS_GZIP_PARSER)
 	return (parser_get_next_line_impl(fp, linep, linecap, linenum,
 	    B_FALSE));
-#else	/* !defined(ACFUTILS_BUILD) */
+#else	/* !defined(ACFUTILS_BUILD) && !defined(ACFUTILS_GZIP_PARSER) */
 	return (parser_get_next_line_impl(fp, linep, linecap, linenum));
-#endif	/* !defined(ACFUTILS_BUILD) */
+#endif	/* !defined(ACFUTILS_BUILD) && !defined(ACFUTILS_GZIP_PARSER) */
 }
 
-#ifdef	ACFUTILS_BUILD
+#if	defined(ACFUTILS_BUILD) || defined(ACFUTILS_GZIP_PARSER)
 /*
  * Same as parser_get_next_line, but for gzip-compressed files.
  */
@@ -231,7 +257,7 @@ parser_get_next_gzline(void *gz_fp, char **linep, size_t *linecap,
 	return (parser_get_next_line_impl(gz_fp, linep, linecap, linenum,
 	    B_TRUE));
 }
-#endif	/* defined(ACFUTILS_BUILD) */
+#endif	/* defined(ACFUTILS_BUILD) || defined(ACFUTILS_GZIP_PARSER) */
 
 UNUSED_ATTR static char *
 parser_get_next_quoted_str(FILE *fp)
@@ -282,6 +308,8 @@ API_EXPORT char *path_last_comp_subst(const char *path, const char *replace);
 API_EXPORT char *path_last_comp(const char *path);
 #define	path_ext_subst			ACFSYM(path_ext_subst)
 API_EXPORT char *path_ext_subst(const char *path, const char *ext);
+#define	path_normalize		ACFSYM(path_normalize)
+API_EXPORT void path_normalize(char *path);
 
 #define	file2str			ACFSYM(file2str)
 API_EXPORT char *file2str(const char *comp, ...) SENTINEL_ATTR;
@@ -296,33 +324,14 @@ API_EXPORT ssize_t filesz(const char *filename);
 
 /*
  * strlcpy is a BSD function not available on Windows, so we roll a simple
- * version of it ourselves. Also, on BSD it's SLOOOOW. Inline for max perf.
+ * version of it ourselves. Can't inline this function, because GCC's fucked
+ * up array bounds checker will squawk endlessly when this is used to copy
+ * strings to a fixed-size array.
  */
 #if	IBM || LIN
 #define	strlcpy				lacf_strlcpy
 #endif
-static inline void
-lacf_strlcpy(char *restrict dest, const char *restrict src, size_t cap)
-{
-	size_t l;
-
-	ASSERT(cap != 0);
-	/*
-	 * We MUSTN'T use strlen here, because src may be SIGNIFICANTLY
-	 * larger than dest and we don't want to measure the ENTIRE body
-	 * of src. We only care for length UP TO the destination capacity.
-	 */
-	for (l = 0; l + 1 < cap && src[l] != '\0'; l++)
-		;
-	/*
-	 * Due to a bug in GCC, we can't use strncpy, as it sometimes throws
-	 * "call to __builtin___strncpy_chk will always overflow destination
-	 * buffer", even when it's absolutely NOT the case.
-	 */
-	memcpy(dest, src, MIN(cap - 1, l + 1));
-	/* Insure the string is ALWAYS terminated */
-	dest[cap - 1] = '\0';
-}
+void lacf_strlcpy(char *restrict dest, const char *restrict src, size_t cap);
 
 static inline const char *
 lacf_basename(const char *str)
@@ -346,16 +355,17 @@ lacf_basename(const char *str)
 UNUSED_ATTR static ssize_t
 lacf_getline(char **line_p, size_t *cap_p, FILE *fp)
 {
-#ifdef	ACFUTILS_BUILD
+#if	defined(ACFUTILS_BUILD) || defined(ACFUTILS_GZIP_PARSER)
 	return (lacf_getline_impl(line_p, cap_p, fp, B_FALSE));
 #else
 	return (lacf_getline_impl(line_p, cap_p, fp));
 #endif
 }
 
-#if	IBM && (defined(_GNU_SOURCE) || defined(_POSIX_C_SOURCE))
+#if	IBM && !defined(__cplusplus) && \
+	(defined(_GNU_SOURCE) || defined(_POSIX_C_SOURCE))
 #define	getline				lacf_getline
-#endif	/* IBM && (defined(_GNU_SOURCE) || defined(_POSIX_C_SOURCE)) */
+#endif
 
 #define	strtolower			ACFSYM(strtolower)
 API_EXPORT void strtolower(char *str);
@@ -399,9 +409,88 @@ vsprintf_alloc(const char *fmt, va_list ap)
 
 	ASSERT(l >= 0);
 	str = (char *)safe_malloc(l + 1);
-	VERIFY3S(vsnprintf(str, l + 1, fmt, ap), ==, l);
+	(void)vsnprintf(str, l + 1, fmt, ap);
 
 	return (str);
+}
+
+/*
+ * Portable version of BSD & POSIX strcasecmp.
+ */
+static inline int
+lacf_strcasecmp(const char *s1, const char *s2)
+{
+	int l1, l2, res;
+
+	ASSERT(s1 != NULL);
+	ASSERT(s2 != NULL);
+
+	l1 = strlen(s1);
+	l2 = strlen(s2);
+
+	if (l1 < 4096 && l2 < 4096) {
+		char s1_lower[l1 + 1], s2_lower[l2 + 1];
+
+		lacf_strlcpy(s1_lower, s1, l1 + 1);
+		lacf_strlcpy(s2_lower, s2, l2 + 1);
+		strtolower(s1_lower);
+		strtolower(s2_lower);
+		res = strcmp(s1_lower, s2_lower);
+	} else {
+		char *s1_lower = (char *)safe_malloc(l1 + 1);
+		char *s2_lower = (char *)safe_malloc(l2 + 1);
+
+		lacf_strlcpy(s1_lower, s1, l1 + 1);
+		lacf_strlcpy(s2_lower, s2, l2 + 1);
+		strtolower(s1_lower);
+		strtolower(s2_lower);
+		res = strcmp(s1_lower, s2_lower);
+		free(s1_lower);
+		free(s2_lower);
+	}
+	return (res);
+}
+
+/*
+ * Portable version of BSD & POSIX strcasestr.
+ */
+static inline char *
+lacf_strcasestr(const char *haystack, const char *needle)
+{
+	int l1, l2;
+	char *res;
+
+	ASSERT(haystack != NULL);
+	ASSERT(needle != NULL);
+
+	l1 = strlen(haystack);
+	l2 = strlen(needle);
+
+	if (l1 < 4096 && l2 < 4096) {
+		char haystack_lower[l1 + 1], needle_lower[l2 + 1];
+
+		lacf_strlcpy(haystack_lower, haystack, l1 + 1);
+		lacf_strlcpy(needle_lower, needle, l2 + 1);
+		strtolower(haystack_lower);
+		strtolower(needle_lower);
+		res = strstr(haystack_lower, needle_lower);
+		if (res != NULL)
+			res = (char *)haystack + (res - haystack_lower);
+	} else {
+		char *haystack_lower = (char *)safe_malloc(l1 + 1);
+		char *needle_lower = (char *)safe_malloc(l2 + 1);
+
+		lacf_strlcpy(haystack_lower, haystack, l1 + 1);
+		lacf_strlcpy(needle_lower, needle, l2 + 1);
+		strtolower(haystack_lower);
+		strtolower(needle_lower);
+		res = strstr(haystack_lower, needle_lower);
+		if (res != NULL)
+			res = (char *)haystack + (res - haystack_lower);
+		free(haystack_lower);
+		free(needle_lower);
+	}
+	return (res);
 }
 
 static inline int
@@ -439,6 +528,14 @@ floormul(double x, double y)
 	return (floor(x / y) * y);
 }
 
+#define	SET_BITFIELD_1(out_var, bit_mask, bit_value) \
+	do { \
+		if (bit_value) \
+			(out_var) |= (bit_mask); \
+		else \
+			(out_var) &= ~(bit_mask); \
+	} while (0)
+
 /* file/directory manipulation */
 #define	file_eixsts			ACFSYM(file_exists)
 API_EXPORT bool_t file_exists(const char *path, bool_t *isdir);
@@ -473,17 +570,6 @@ API_EXPORT struct dirent *readdir(DIR *dirp);
 #define	closedir	ACFSYM(closedir)
 API_EXPORT void closedir(DIR *dirp);
 
-#if	!defined(_MSC_VER)
-/* A minimally compatible POSIX-style file stat reading implementation */
-#define	stat		ACFSYM(stat)
-struct stat {
-	uint64_t	st_size;
-	time_t		st_atime;
-	time_t		st_mtime;
-};
-API_EXPORT int stat(const char *pathname, struct stat *buf);
-#endif	/* !defined(_MSC_VER) */
-
 #define	sleep(x)	SleepEx((x) * 1000, FALSE)
 #define	usleep(x)	SleepEx((x) / 1000, FALSE)
 
@@ -499,6 +585,16 @@ API_EXPORT void win_perror(DWORD err, PRINTF_FORMAT(const char *fmt), ...)
 
 API_EXPORT void lacf_qsort_r(void *base, size_t nmemb, size_t size,
     int (*compar)(const void *, const void *, void *), void *arg);
+
+#if	defined(__STDC_LIB_EXT1__) || IBM
+#define	lacf_gmtime_r(__time__, __tm__)	_gmtime64_s((__tm__), (__time__))
+#define	LACF_GMTIME_CHK(__time__, __tm__) \
+	(_gmtime64_s((__tm__), (__time__)) == 0)
+#else
+#define	lacf_gmtime_r			gmtime_r
+#define	LACF_GMTIME_CHK(__time__, __tm__) \
+	(gmtime_r((__time__), (__tm__)) != NULL)
+#endif
 
 #ifdef	__cplusplus
 }

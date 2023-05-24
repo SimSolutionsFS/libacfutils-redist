@@ -44,16 +44,21 @@ extern "C" {
 typedef struct conf conf_t;
 
 API_EXPORT conf_t *conf_create_empty(void);
+API_EXPORT conf_t *conf_create_copy(const conf_t *conf2);
 API_EXPORT void conf_free(conf_t *conf);
 
 API_EXPORT conf_t *conf_read_file(const char *filename, int *errline);
 API_EXPORT conf_t *conf_read(FILE *fp, int *errline);
 API_EXPORT conf_t *conf_read2(void *fp, int *errline, bool_t compressed);
+API_EXPORT conf_t *conf_read_buf(const void *buf, size_t cap, int *errline);
 
 API_EXPORT bool_t conf_write_file(const conf_t *conf, const char *filename);
 API_EXPORT bool_t conf_write_file2(const conf_t *conf, const char *filename,
     bool_t compressed);
 API_EXPORT bool_t conf_write(const conf_t *conf, FILE *fp);
+API_EXPORT size_t conf_write_buf(const conf_t *conf, void *buf, size_t cap);
+
+API_EXPORT void conf_merge(const conf_t *conf_from, conf_t *conf_to);
 
 API_EXPORT bool_t conf_get_str(const conf_t *conf, const char *key,
     const char **value);
@@ -117,7 +122,7 @@ API_EXPORT void conf_set_b_v(conf_t *conf, PRINTF_FORMAT(const char *fmt),
 API_EXPORT void conf_set_data_v(conf_t *conf, PRINTF_FORMAT(const char *fmt),
     const void *buf, size_t sz, ...) PRINTF_ATTR2(2, 5);
 
-#if	__STDC_VERSION__ >= 199901L
+#if	__STDC_VERSION__ >= 199901L || defined(__cplusplus)
 API_EXPORT bool conf_get_b2(const conf_t *conf, const char *key,
     bool *value);
 API_EXPORT void conf_set_b2(conf_t *conf, const char *key, bool value);
@@ -129,7 +134,7 @@ API_EXPORT bool conf_get_b2_v(const conf_t *conf,
  * promotion, which is undefined behavior in varargs.
  */
 #define	conf_set_b2_v	conf_set_b_v
-#endif	/* __STDC_VERSION__ >= 199901L */
+#endif	/* __STDC_VERSION__ >= 199901L || defined(__cplusplus) */
 
 API_EXPORT bool_t conf_walk(const conf_t *conf, const char **key,
     const char **value, void **cookie);

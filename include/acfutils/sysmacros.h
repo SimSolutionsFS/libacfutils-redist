@@ -50,12 +50,6 @@ extern "C" {
 #endif
 #endif	/* !IBM */
 
-#define	ALIGN4(__var__)		ALIGN(__var__, 4)
-#define	ALIGN8(__var__)		ALIGN(__var__, 8)
-#define	ALIGN16(__var__)	ALIGN(__var__, 16)
-#define	ALIGN32(__var__)	ALIGN(__var__, 32)
-#define	ALIGN64(__var__)	ALIGN(__var__, 64)
-
 #if	defined(__GNUC__) || defined(__clang__)
 #define	DEPRECATED_FUNC(f)	f __attribute__((deprecated))
 #define	PRINTF_ATTR(x)		__attribute__((format(printf, x, x + 1)))
@@ -64,6 +58,9 @@ extern "C" {
 #define	SENTINEL_ATTR		__attribute__((sentinel))
 #define	HOT_ATTR		__attribute__((hot))
 #define	PURE_ATTR		__attribute__((pure))
+#define	ALWAYS_INLINE_ATTR	__attribute__((always_inline))
+#define	ALIGN_ATTR(x)		__attribute__((aligned(x)))
+
 #ifndef	BSWAP32
 #define	BSWAP16(x)	__builtin_bswap16((x))
 #define	BSWAP32(x)	__builtin_bswap32((x))
@@ -80,9 +77,16 @@ extern "C" {
 #define	SENTINEL_ATTR
 #define	HOT_ATTR
 #define	PURE_ATTR
+#define	ALWAYS_INLINE_ATTR
 
 #define	COND_LIKELY(x)		x
 #define	COND_UNLIKELY(x)	x
+
+#if	defined(_MSC_VER)
+#define	ALIGN_ATTR(x)		__declspec(align(x))
+#else
+#define	ALIGN_ATTR(x)
+#endif
 
 #if	_MSC_VER >= 1400
 # define	DEPRECATED_FUNC(f)	__declspec(deprecated) f

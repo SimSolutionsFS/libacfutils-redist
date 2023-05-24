@@ -31,6 +31,7 @@
 
 #include "assert.h"
 #include "core.h"
+#include "crc64.h"
 #include "time.h"
 
 #ifdef	__cplusplus
@@ -59,6 +60,8 @@ typedef struct {
 	};
 	uint64_t		changed_t;
 	uint64_t		delay_us;
+	uint64_t		delay_base_us;
+	double			delay_rand_fract;
 #ifndef	_MSC_VER
 	int			__serialize_marker[0];
 #else
@@ -81,6 +84,8 @@ delay_line_init(delay_line_t *line, uint64_t delay_us)
 	ASSERT(line != NULL);
 	memset(line, 0, sizeof (*line));
 	line->delay_us = delay_us;
+	line->delay_base_us = delay_us;
+	line->delay_rand_fract = 0;
 }
 
 static inline void
@@ -90,22 +95,61 @@ delay_line_init_time_func(delay_line_t *line, uint64_t delay_us,
 	ASSERT(line != NULL);
 	memset(line, 0, sizeof (*line));
 	line->delay_us = delay_us;
+	line->delay_base_us = delay_us;
+	line->delay_rand_fract = 0;
 	line->time_func = time_func;
 	line->time_func_userinfo = time_func_userinfo;
+}
+
+static inline void
+delay_line_refresh_delay(delay_line_t *line)
+{
+	ASSERT(line != NULL);
+	if (line->delay_rand_fract == 0) {
+		line->delay_us = line->delay_base_us;
+	} else {
+		uint64_t rand_us = line->delay_rand_fract * line->delay_base_us;
+		line->delay_us = line->delay_base_us +
+		    (uint64_t)((crc64_rand_fract() - 0.5) * rand_us);
+	}
 }
 
 static inline void
 delay_line_set_delay(delay_line_t *line, uint64_t delay_us)
 {
 	ASSERT(line != NULL);
-	line->delay_us = delay_us;
+	line->delay_base_us = delay_us;
+	delay_line_refresh_delay(line);
 }
 
 static inline uint64_t
 delay_line_get_delay(const delay_line_t *line)
 {
 	ASSERT(line != NULL);
+	return (line->delay_base_us);
+}
+
+static inline uint64_t
+delay_line_get_delay_act(const delay_line_t *line)
+{
+	ASSERT(line != NULL);
 	return (line->delay_us);
+}
+
+static inline void
+delay_line_set_rand(delay_line_t *line, double rand_fract)
+{
+	ASSERT(line != NULL);
+	ASSERT3F(rand_fract, >=, 0);
+	ASSERT3F(rand_fract, <=, 1);
+	line->delay_rand_fract = rand_fract;
+	delay_line_refresh_delay(line);
+}
+
+static inline double
+delay_line_get_rand(const delay_line_t *line)
+{
+	return (line->delay_rand_fract);
 }
 
 /*
@@ -128,6 +172,7 @@ delay_line_pull_ ## abbrev_type(delay_line_t *line) \
 	if (line->abbrev_type ## _new != line->abbrev_type && \
 	    now - line->changed_t >= line->delay_us) { \
 		line->abbrev_type = line->abbrev_type ## _new; \
+		delay_line_refresh_delay(line); \
 	} \
 	return (line->abbrev_type); \
 }
@@ -156,6 +201,19 @@ DEF_DELAY_LINE_PEEK(uint64_t, u64)
 DEF_DELAY_LINE_PEEK(double, f64)
 
 /*
+ * Functions to peek at the new value in a delay line without ever
+ * affecting its state change to a new value. Can be used in combination
+ * with delay_line_push_* to look for a state change in a delay line in
+ * response to the passage of time.
+ *	delay_line_pull_i64_new	- peeks at the delay line as an int64_t
+ *	delay_line_pull_u64_new	- peeks at the delay line as a uint64_t
+ *	delay_line_pull_f64_new	- peeks at the delay line as a double
+ */
+DEF_DELAY_LINE_PEEK(int64_t, i64_new)
+DEF_DELAY_LINE_PEEK(uint64_t, u64_new)
+DEF_DELAY_LINE_PEEK(double, f64_new)
+
+/*
  * Functions that push a new value to a delay line:
  *	delay_line_push_i64	- pushes an int64_t to the delay line
  *	delay_line_push_u64	- pushes a uint64_t to the delay line
@@ -176,6 +234,7 @@ delay_line_push_ ## abbrev_type(delay_line_t *line, typename value) \
 	if (line->abbrev_type == line->abbrev_type ## _new && \
 	    value != line->abbrev_type ## _new) { \
 		line->changed_t = now; \
+		delay_line_refresh_delay(line); \
 	} \
 	line->abbrev_type ## _new = value; \
 	return (delay_line_pull_ ## abbrev_type(line)); \
@@ -238,6 +297,22 @@ DEF_DELAY_LINE_PUSH_IMM(double, f64)
 #define	DELAY_LINE_PUSH_IMM(line, value) \
 	DELAY_LINE_PUSH_IMM_macro_requires_C11_or_greater
 #endif	/* __STDC_VERSION__ < 201112L */
+
+/*
+ * CAUTION: do NOT use this for precise interval timing. Delay lines can be
+ * used as simple timed triggers, but they don't keep time accurately, or
+ * account for triggering-overshoot. If you try this, your clock will end
+ * up slipping and running too slow!
+ */
+static inline uint64_t
+delay_line_get_time_since_change(const delay_line_t *line)
+{
+	uint64_t now;
+	ASSERT(line != NULL);
+	now = (line->time_func != NULL ?
+	    line->time_func(line->time_func_userinfo) : microclock());
+	return (now - line->changed_t);
+}
 
 #ifdef	__cplusplus
 }

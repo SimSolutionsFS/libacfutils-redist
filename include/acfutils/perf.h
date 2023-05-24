@@ -49,10 +49,14 @@ extern "C" {
 #define	MET2FEET(x)	((x) * 3.2808398950131)	/* meters to feet */
 #define	NM2MET(x)	((x) * 1852)		/* nautical miles to meters */
 #define	MET2NM(x)	((x) / 1852.0)		/* meters to nautical miles */
+#define	MET2MILES(x)	(MET2FEET(x) / 5280.0)	/* meters to statute miles */
+#define	MILES2MET(x)	FEET2MET((x) * 5280.0)	/* statute miles to meters */
 #define	KT2MPS(k)	(NM2MET(k) / 3600.0)	/* knots to m/s */
 #define	MPS2KT(k)	(MET2NM(k) * 3600.0)	/* m/s to knots */
 #define	MPS2KPH(k)	((k) * 3.6)		/* m/s to km/h */
 #define	KPH2MPS(k)	((k) / 3.6)		/* km/h to m/s */
+#define	MPS2MPH(k)	((k) / 0.44704)		/* m/s to mph */
+#define	MPH2MPS(k)	((k) * 0.44704)		/* mph to m/s */
 #define	FPM2MPS(f)	FEET2MET((f) / 60.0)	/* ft.min^-1 to m.s^-1 */
 #define	MPS2FPM(m)	MET2FEET((m) * 60.0)	/* m.s^-1 to ft.min^-1 */
 
@@ -99,9 +103,9 @@ extern "C" {
 #define	EARTH_GRAVITY	9.80665		/* Earth surface grav. acceleration */
 #define	EARTH_SID_DAY	86164.0905	/* Sidereal day on Earth in seconds */
 #define	EARTH_ROT_RATE	(360.0 / EARTH_SID_DAY)	/* deg/sec */
-#define	DRY_AIR_MOL	0.0289644	/* Molar mass of dry air */
+#define	DRY_AIR_MOL	0.02896968	/* Molar mass of dry air */
 #define	GAMMA		1.4		/* Specific heat ratio of dry air */
-#define	R_univ		8.31447		/* Universal gas constant */
+#define	R_univ		8.314462618	/* Universal gas constant */
 #define	R_spec		287.058		/* Specific gas constant of dry air */
 #define	BOLTZMANN_CONST	5.67E-8		/* Stefan-Boltzmann constant */
 
@@ -118,25 +122,32 @@ typedef struct {
 	int	spd;
 	double	Cd;
 } drag_coeff_t;
-
 typedef struct {
-	double		zfw;		/* kg */
-	double		fuel;		/* kg */
-	double		clb_ias;	/* knots */
-	double		clb_ias_init;	/* knots */
-	double		clb_mach;	/* fraction */
-	double		crz_ias;	/* knots */
-	double		crz_mach;	/* fraction */
-	double		crz_lvl;	/* flight level */
-	double		des_ias;	/* knots */
-	double		des_mach;	/* fraction */
-	double		to_flap;	/* ratio */
-	double		accel_hgt;	/* feet AGL */
-	double		spd_lim;	/* knots IAS */
-	double		spd_lim_alt;	/* feet AMSL */
+	float	kias;	/* knots */
+	float	alt_ft;	/* feet */
+} flt_spd_lim_t;
+/*
+ * Serializable in its entirety.
+ */
+typedef struct {
+	float		zfw;		/* kg */
+	float		fuel;		/* kg */
+	float		clb_ias;	/* knots */
+	float		clb_ias_init;	/* knots */
+	float		clb_mach;	/* fraction */
+	float		crz_ias;	/* knots */
+	float		crz_mach;	/* fraction */
+	float		crz_lvl;	/* feet */
+	float		des_ias;	/* knots */
+	float		des_mach;	/* fraction */
+	float		to_flap;	/* ratio */
+	float		accel_hgt;	/* feet AGL */
+#define	FLT_PERF_NUM_SPD_LIMS	2
+	flt_spd_lim_t	clb_spd_lim[FLT_PERF_NUM_SPD_LIMS];
+	flt_spd_lim_t	des_spd_lim[FLT_PERF_NUM_SPD_LIMS];
 
-	double		thr_derate;
-	double		bank_ratio;
+	float		thr_derate;
+	float		bank_ratio;
 	unsigned	num_eng;
 } flt_perf_t;
 
@@ -146,9 +157,6 @@ typedef struct {
 	char		*acft_type;
 
 	flt_perf_t	ref;	/* Reference performance values */
-
-	double		max_fuel;
-	double		max_gw;
 
 	char		*eng_type;
 	unsigned	num_eng;
@@ -201,6 +209,9 @@ typedef enum {
 	ACCEL_TAKEOFF	/* Accel to target speed first without needing lift */
 } accelclb_t;
 
+API_EXPORT void lacf_set_perf_step_debug(bool_t flag);
+API_EXPORT bool_t lacf_get_perf_step_debug(void);
+
 API_EXPORT acft_perf_t *acft_perf_parse(const char *filename);
 API_EXPORT void acft_perf_destroy(acft_perf_t *perf);
 
@@ -223,7 +234,7 @@ API_EXPORT double dist2accelclb(const flt_perf_t *flt, const acft_perf_t *acft,
     double fuel, vect2_t dir,
     double flap_ratio, double *alt, double *kcas, vect2_t wind,
     double alt_tgt, double kcas_tgt, double mach_lim, double dist_tgt,
-    accelclb_t type, double *burnp);
+    accelclb_t type, double *burnp, double *ttg_out);
 API_EXPORT double decel2dist(const flt_perf_t *flt, const acft_perf_t *acft,
     double isadev, double qnh, double tp_alt, double fuel,
     double alt, double kcas1, double kcas2, double dist_tgt,
@@ -231,12 +242,13 @@ API_EXPORT double decel2dist(const flt_perf_t *flt, const acft_perf_t *acft,
 API_EXPORT double perf_crz2burn(double isadev, double tp_alt, double qnh,
     double alt_ft, double spd, bool_t is_mach, double hdg, vect2_t wind1,
     vect2_t wind2, double fuel, double dist_nm, const acft_perf_t *acft,
-    const flt_perf_t *flt);
+    const flt_perf_t *flt, double *ttg_out);
 API_EXPORT double perf_des2burn(const flt_perf_t *flt, const acft_perf_t *acft,
-    double isadev, double qnh, double fuel, double hdgt, double dist_m,
+    double isadev, double qnh, double fuel, double hdgt, double dist_nm,
     double mach_lim,
-    double alt1, double kcas1, vect2_t wind1,
-    double alt2, double kcas2, vect2_t wind2);
+    double alt1_ft, double kcas1, vect2_t wind1,
+    double alt2_ft, double kcas2, vect2_t wind2,
+    double *ttg_out);
 
 API_EXPORT double perf_TO_spd(const flt_perf_t *flt, const acft_perf_t *acft);
 
@@ -246,13 +258,22 @@ API_EXPORT double acft_get_sfc(const flt_perf_t *flt, const acft_perf_t *acft,
 
 API_EXPORT double perf_get_turn_rate(double bank_ratio, double gs_kts,
     const flt_perf_t *flt, const acft_perf_t *acft);
-
+/*
+ * Aviation versions, assuming ISA conditions. Altitude in feet!
+ */
 #define	alt2press	ACFSYM(alt2press)
-API_EXPORT double alt2press(double alt, double qnh);
+API_EXPORT double alt2press(double alt_ft, double qnh_Pa);
 #define	press2alt	ACFSYM(press2alt)
-API_EXPORT double press2alt(double press, double qnh);
-#define	press2alt_noaa	ACFSYM(press2alt_noaa)
-API_EXPORT double press2alt_noaa(double press, double qnh);
+API_EXPORT double press2alt(double press_Pa, double qnh_Pa);
+/*
+ * Generic barometric versions - altitudes in meters!
+ */
+#define	alt2press_baro	ACFSYM(alt2press_baro)
+API_EXPORT double alt2press_baro(double alt_m, double p0_Pa, double T0_K,
+    double g_mss);
+#define	press2alt_baro	ACFSYM(press2alt_baro)
+API_EXPORT double press2alt_baro(double p_Pa, double p0_Pa, double T0_K,
+    double g_mss);
 
 #define	alt2fl		ACFSYM(alt2fl)
 API_EXPORT double alt2fl(double alt, double qnh);
