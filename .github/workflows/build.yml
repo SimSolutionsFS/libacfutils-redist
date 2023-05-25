@@ -16,6 +16,15 @@ jobs:
         with:
           repository: skiselkov/libacfutils
           submodules: recursive
+
+      - name: Restore cache
+        id: cache-restore
+        uses: actions/cache/restore@v3.3.1
+        with:
+          path: ./
+          key: ${{ runner.os }}-cache
+
+      - run: git fetch && git pull
           
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
@@ -37,6 +46,13 @@ jobs:
       - name: Build redist
         run: ./build_redist
         
+      - name: Save cache
+        id: cache-save
+        uses: actions/cache/save@v3.3.1
+        with:
+          path: ./
+          key: ${{ steps.cache-restore.outputs.cache-primary-key }}
+
       - uses: actions/upload-artifact@v3.1.2
         with:
           name: ${{matrix.os}} Redist Folder
