@@ -23,8 +23,6 @@ jobs:
         
       - uses: melusina-org/gha-install-macports@v1
         if: runner.os != 'Linux'
-        with:
-          parameters: 'testsuite/run-testsuite-on-macos-12.yaml'
           
       - name: Install Mac dependencies
         if: runner.os != 'Linux'
