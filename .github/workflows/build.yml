@@ -32,9 +32,6 @@ jobs:
         if: runner.os != 'Linux'
         run: brew install autoconf automake cmake gnu-sed libtool pkgconfig qt brotli
         
-      - name: Config deps
-        run: ./pkg-config-deps
-        
       - name: Build deps
         run: ./build_deps
         
