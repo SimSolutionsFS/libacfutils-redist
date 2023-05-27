@@ -30,7 +30,7 @@ jobs:
 
       - name: Install Mac dependencies
         if: runner.os != 'Linux'
-        run: brew install autoconf automake cmake gnu-sed libtool pkgconfig qt brotli
+        run: brew install autoconf automake cmake gnu-sed libtool pkgconfig qt && brew reinstall brotli && brew link brotli
         
       - name: Build deps
         run: ./build_deps
