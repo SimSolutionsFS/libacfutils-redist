@@ -31,6 +31,10 @@ extern "C" {
 #define	POW3(x)	((x) * (x) * (x))
 #define	POW2(x)	((x) * (x))
 #define	ROUND_ERROR	1e-10
+#ifndef	ABS
+/** @return The absolute value of `x`. */
+#define	ABS(x)	((x) > 0 ? (x) : -(x))
+#endif
 
 struct vect2_s;
 
@@ -45,6 +49,9 @@ API_EXPORT double fx_lin_multi(double x, const struct vect2_s *points,
 #define	fx_lin_multi_inv	ACFSYM(fx_lin_multi_inv)
 API_EXPORT double *fx_lin_multi_inv(double y, const struct vect2_s *points,
     size_t *num_out);
+#define	fx_lin_multi_inv2	ACFSYM(fx_lin_multi_inv2)
+API_EXPORT double *fx_lin_multi_inv2(double y, const struct vect2_s *points,
+    bool_t extrapolate, size_t *num_out);
 
 /*
  * Weighted avg, 'w' is weight fraction from 0.0 = all of x to 1.0 = all of y.
@@ -118,6 +125,7 @@ typedef struct {
  * @param points Input points that the interpolator needs to pass through.
  * @param npts Number points in `points'. This must be GREATER than 0.
  */
+#define	pn_interp_init	ACFSYM(pn_interp_init)
 API_EXPORT void pn_interp_init(pn_interp_t *interp, const vect2_t *points,
     unsigned npts);
 
@@ -171,14 +179,14 @@ smoothstep_inv(double x)
 		if (isnan((oldval))) { \
 			(oldval) = tmpval; \
 		} else if ( \
-		    (oldval) > (newval) + (step) * (0.5 + (hyst_rng)) || \
-		    (oldval) < (newval) - (step) * (0.5 + (hyst_rng))) { \
+		    (newval) > (oldval) + (step) * (0.5 + (hyst_rng)) || \
+		    (newval) < (oldval) - (step) * (0.5 + (hyst_rng))) { \
 			(oldval) = tmpval; \
 		} \
 	} while (0)
 
 #define	HROUND(oldval, newval, step) \
-	HROUND2((oldval), (newval), (step), 0.2)
+	HROUND2((oldval), (newval), (step), 0.35)
 
 #ifdef	__cplusplus
 }

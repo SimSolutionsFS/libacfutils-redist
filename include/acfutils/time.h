@@ -69,9 +69,57 @@ nanoclock(void)
  */
 time_t lacf_timegm(const struct tm *tm);
 
+/*
+ * Returns time in the system's real time clock as the number of microseconds
+ * since UTC 1970-01-01 (unixtime). In essence, this is a microsecond-
+ * accurate time_t.
+ */
+static inline uint64_t
+lacf_microtime(void)
+{
 #if	IBM
-#define	timegm lacf_timegm
-#endif
+	/*
+	 * On windows, we emulate this by simply adding the millisecond
+	 * portion onto the whole Unixtime seconds provided by time().
+	 */
+	uint64_t time_micro = ((uint64_t)time(NULL)) * 1000000llu;
+	SYSTEMTIME st;
+	GetSystemTime(&st);
+	return (time_micro + (uint64_t)st.wMilliseconds * 1000llu);
+#else	/* !IBM */
+	/* On Mac & Linux, microclock already does this */
+	return (microclock());
+#endif	/* !IBM */
+}
+
+/*
+ * Takes day-of-year (or an X-Plane "local_date_days" value) and converts
+ * it to month + day-of-month in the format used in the "tm" structure
+ * (see the C89 standard gmtime, ctime, asctime or localtime functions).
+ *
+ * @param days The input value of the number of days since January 1.
+ *	The function always assumes a non-leap year (consistent with
+ *	X-Plane's behavior).
+ * @param tm_mon If not NULL, this is filled with the month (0-11).
+ * @param tm_mday If not NULL, this is filled with the day-of-month (1-31).
+ */
+static inline void
+lacf_yday_to_mon_mday(unsigned days, int *tm_mon, int *tm_mday)
+{
+	static const unsigned month2days[12] = {
+	    0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
+	};
+	for (int i = 11; i >= 0; i--) {
+		if (month2days[i] <= days) {
+			if (tm_mon != NULL)
+				*tm_mon = i;
+			if (tm_mday != NULL)
+				*tm_mday = days - month2days[i] + 1;
+			return;
+		}
+	}
+	VERIFY_FAIL();
+}
 
 #ifdef	__cplusplus
 }
